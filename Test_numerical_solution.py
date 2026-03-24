@@ -170,3 +170,52 @@ u0 = np.array([0.0, 0.0, 1.0])
 xdot0 = f(x0, u0)
 print("xdot(x0,u0) =")
 print(xdot0)
+
+###################################################################
+
+def linearize_numerically(f, x_e, u_e, eps=1e-6):
+    x_e = np.asarray(x_e, dtype=float)
+    u_e = np.asarray(u_e, dtype=float)
+
+    n = len(x_e)
+    m = len(u_e)
+
+    A = np.zeros((n, n))
+    B = np.zeros((n, m))
+
+    f0 = np.asarray(f(x_e, u_e), dtype=float)
+
+    for i in range(n):
+        dx = np.zeros(n)
+        dx[i] = eps
+        f_plus = np.asarray(f(x_e + dx, u_e), dtype=float)
+        f_minus = np.asarray(f(x_e - dx, u_e), dtype=float)
+        A[:, i] = (f_plus - f_minus) / (2 * eps)
+
+    for j in range(m):
+        du = np.zeros(m)
+        du[j] = eps
+        f_plus = np.asarray(f(x_e, u_e + du), dtype=float)
+        f_minus = np.asarray(f(x_e, u_e - du), dtype=float)
+        B[:, j] = (f_plus - f_minus) / (2 * eps)
+
+    return A, B
+
+def controllability_matrix(A, B):
+    n = A.shape[0]
+    C = B
+    AB = B
+    for _ in range(1, n):
+        AB = A @ AB
+        C = np.hstack((C, AB))
+    return C
+
+x_equilibrium = np.zeros(14)
+u_equilibrium = np.zeros(3)
+A, B = linearize_numerically(f, x_equilibrium, u_equilibrium)
+
+C = controllability_matrix(A, B)
+rank_C = np.linalg.matrix_rank(C)
+
+print("Controllability rank:", rank_C)
+print("State dimension:", A.shape[0])

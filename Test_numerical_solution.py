@@ -6,6 +6,32 @@ from scipy.linalg import null_space
 
 np.set_printoptions(precision=5, suppress=True)
 
+"""
+VARIABLE NAMES
+-------------------------------------------------------------------------------
+STATES:
+phi: Rope angle
+theta: Rolling Wheel Rolling Angle
+delta: Rolling Wheel Tilting Angle
+gamma: Unicycle Body Tilting Angle
+beta: Balancing Wheel Rolling Angle
+
+INPUTS:
+tau_theta, tau_beta = Torques applied at theta, beta
+
+CONSTANTS:
+R: Radius of Rope Movement
+r1 m1: Radius, Mass of Rolling Wheel
+r2, m2: Radius, Mass of Balancing Wheel
+r_rope, m_rope: Radius, Mass of Rope
+L_rope,: Length of Rope
+l1: Length from center of Rolling Wheel to Center of Unicycle Body
+l2: Length from Center of Unicycle Body to Center of Balancing Wheel
+m_rod: Mass of Unicycle Body
+-------------------------------------------------------------------------------
+
+"""
+
 phi, theta, delta, gamma, beta = me.dynamicsymbols('phi theta delta gamma beta')
 R, l1, l2, r1, r2, r3, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r3 r_rope L_rope", real=True)
 m1, m2, m3, m_rod, m_rope, g = sm.symbols("m1 m2 m3 m_rod m_rope g", real=True)
@@ -15,6 +41,7 @@ t = me.dynamicsymbols._t
 
 q = sm.Matrix([phi, delta, theta, gamma, beta])
 qd = q.diff(t)
+
 
 N = me.ReferenceFrame('N')
 A = me.ReferenceFrame('A')
@@ -49,6 +76,7 @@ PC.set_pos(PB3, l1*C.z)
 PD.set_pos(PB3, (l1 + l2)*C.z)
 #PE.set_pos(PB12, (l1 + l2)*B2.z)
 
+#Vectors from Each Point to Origin
 O_r_PA = PA.pos_from(O).express(N)
 O_r_PB12 = PB12.pos_from(O).express(N)
 O_r_PB3 = PB3.pos_from(O).express(N)
@@ -56,6 +84,7 @@ O_r_PC = PC.pos_from(O).express(N)
 O_r_PD = PD.pos_from(O).express(N)
 #O_r_PE = PE.pos_from(O).express(N)
 
+#Velocities of each Point wrt RF N
 O_r_PA_dot = O_r_PA.dt(N)
 O_r_PB12_dot = O_r_PB12.dt(N)
 O_r_PB3_dot = O_r_PB3.dt(N)
@@ -63,6 +92,7 @@ O_r_PC_dot = O_r_PC.dt(N)
 O_r_PD_dot = O_r_PD.dt(N)
 #O_r_PE_dot = O_r_PE.dt(N)
 
+#Velocities squared
 PA_squared = O_r_PA_dot.dot(O_r_PA_dot)
 PB12_squared = O_r_PB12_dot.dot(O_r_PB12_dot)
 PB3_squared = O_r_PB3_dot.dot(O_r_PB3_dot)
@@ -70,12 +100,14 @@ PC_squared = O_r_PC_dot.dot(O_r_PC_dot)
 PD_squared = O_r_PD_dot.dot(O_r_PD_dot)
 #PE_squared = O_r_PE_dot.dot(O_r_PE_dot)
 
+#Translational Kinetic Energies
 TA = sm.Rational(1, 2) * m_rope * PA_squared
 TB3 = sm.Rational(1, 2) * m1 * PB3_squared
 TC = sm.Rational(1, 2) * m_rod * PC_squared
 TD = sm.Rational(1, 2) * m2 * PD_squared
 #TE = sm.Rational(1, 2) * m3 * PE_squared
 
+#Rotational Velocities
 A_ang_vel = A.ang_vel_in(N)
 #B1_ang_vel = B1.ang_vel_in(N)
 B2_ang_vel = B2.ang_vel_in(N)
@@ -84,6 +116,7 @@ C_ang_vel = C.ang_vel_in(N)
 D_ang_vel = D.ang_vel_in(N)
 #E_ang_vel = E.ang_vel_in(N)
 
+#Inertias
 I_A = sm.Rational(1, 2) * m_rope * r_rope**2
 #I_B1 = sm.Rational(1, 4) * m1 * r1**2
 I_B2 = sm.Rational(1, 4) * m1 * r1**2
@@ -92,39 +125,44 @@ I_C = (sm.Rational(1, 12) * m_rod * (l1 + l2)**2) * 2
 I_D = m2 * r2**2
 #I_E = m3 * r3**2
 
-
+#Rotational Kinetic Energies
 T_rot_A = I_A * A_ang_vel.dot(A_ang_vel)
 T_rot_B = sm.Rational(1, 2) * I_B3 * B3_ang_vel.dot(B3_ang_vel) 
 T_rot_C = sm.Rational(1, 2) * I_C * C_ang_vel.dot(C_ang_vel)
 T_rot_D = sm.Rational(1, 2) * I_D * D_ang_vel.dot(D_ang_vel)
 #T_rot_E = sm.Rational(1, 2) * I_E * E_ang_vel.dot(E_ang_vel)
 
+#Potential Energies
 PE_PA = m_rope * g * O_r_PA.dot(N.z)
 PE_PB3 = m1 * g * O_r_PB3.dot(N.z)
 PE_PC = m_rod * g * O_r_PC.dot(N.z)
 PE_PD = m2 * g * O_r_PD.dot(N.z)
 #PE_PE = m3 * g * O_r_PE.dot(N.z)
 
+#Total KE and PE of system
 KE_system = TA + TB3 + TC + TD  + T_rot_A + T_rot_B + T_rot_C + T_rot_D 
 PE_system = PE_PA + PE_PB3 + PE_PC + PE_PD
 
+#Lagrange for Equations of motion
 L = KE_system - PE_system
 
 dL_dq = sm.Matrix([sm.diff(L, qi) for qi in q])
 dL_dqd = sm.Matrix([sm.diff(L, qdi) for qdi in qd])
 
-M = dL_dqd.jacobian(qd)
-Aq = dL_dqd.jacobian(q)
+M = dL_dqd.jacobian(qd) #mass matrix
+Aq = dL_dqd.jacobian(q) #
 
-Q = sm.Matrix([0, 0, tau_theta, 0, tau_beta])
+Q = sm.Matrix([0, 0, tau_theta, 0, tau_beta]) #generalised forces
 forcing = Q - (Aq * qd - dL_dq)
 
 params = [R, l1, l2, r1, r2, r3, r_rope, m1, m2, m3, m_rod, m_rope, g, L_rope]
 inputs = [tau_theta, tau_beta]
 state_syms = list(q) + list(qd)
 
+#Converting the system to numeric
 M_num = sm.lambdify(state_syms + params, M, modules="numpy")
 forcing_num = sm.lambdify(state_syms + inputs + params, forcing, modules="numpy")
+
 
 def make_state_space_function(constants):
     p = [constants[s] for s in params]
@@ -165,8 +203,9 @@ constants = {
 
 f = make_state_space_function(constants)
 
+
 x0 = np.zeros(10)
-u0 = np.array([0.0, 0.0])
+u0 = np.array([5, 0])
 
 xdot0 = f(x0, u0)
 print("xdot(x0,u0) =")
@@ -202,6 +241,7 @@ def linearize_numerically(f, x_e, u_e, eps=1e-6):
 
     return A, B
 
+
 def controllability_matrix(A, B):
     n = A.shape[0]
     C = B
@@ -215,6 +255,7 @@ x_equilibrium = np.zeros(10)
 u_equilibrium = np.zeros(2)
 A, B = linearize_numerically(f, x_equilibrium, u_equilibrium)
 
+
 C = controllability_matrix(A, B)
 rank_C = np.linalg.matrix_rank(C)
 
@@ -223,3 +264,15 @@ print("State dimension:", A.shape[0])
 
 N = null_space(C.T)
 print("Uncontrollable subspace basis:\n", N)
+
+
+#State Constraints
+
+#Total rotations to stay on rope
+max_rad_rolling_wheel = (L_rope/r1).evalf(subs={L_rope:10, r1:0.1})
+min_rolling_angle = -(max_rad_rolling_wheel/2)
+max_rolling_angle = (max_rad_rolling_wheel/2)
+
+
+
+

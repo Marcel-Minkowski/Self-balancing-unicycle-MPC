@@ -2,6 +2,20 @@ import numpy as np
 from scipy.linalg import expm
 from quadprog import solve_qp
 import Test_numerical_solution as model
+from scipy.linalg import solve_discrete_are
+import matplotlib.pyplot as plt
+
+from control import dare
+import polytope as pc
+from lqr_set import remove_redundant_constraints
+import numpy as np
+from control import dlqr
+import matplotlib.pyplot as plt
+from scipy.spatial import ConvexHull, HalfspaceIntersection
+from shapely.geometry import Polygon
+import geopandas as gpd
+from scipy.optimize import linprog
+
 
 np.set_printoptions(precision=5, suppress=True)
 
@@ -80,7 +94,7 @@ def build_state_selector(state_index, N):
 
 # Build inequality constraints in the form:
 # A_ineq * U_bar <= b_ineq
-def gen_constraint_matrices(T, S, x0, N, u_min, u_max, theta_index, theta_min, theta_max):
+def gen_constraint_matrices(T, S, x0, N, u_min, u_max, theta_index, theta_min, theta_max, A_inf, b_inf):
     nU = dim_u * N
 
     # ------------------------------------------------------------
@@ -138,17 +152,28 @@ def gen_constraint_matrices(T, S, x0, N, u_min, u_max, theta_index, theta_min, t
         -(theta_min_vec - ETx0)
     ])
 
+    #------------------------------------------------------------
+    #Terminal Set constraint
+    #-------------------------------------------------------------
+    T_last = T[-dim_x:, :]
+    S_last = S[-dim_x:, :]
+
+    A_terminal = A_inf @ S_last
+    b_terminal = b_inf - A_inf @ (T_last @ x0)
+
     # ------------------------------------------------------------
     # Combine all inequality constraints
     # ------------------------------------------------------------
     A_ineq = np.vstack([
         A_u,
-        A_theta
+        A_theta,
+        A_terminal
     ])
 
     b_ineq = np.hstack([
         b_u,
-        b_theta
+        b_theta,
+        b_terminal
     ])
 
     return A_ineq, b_ineq
@@ -160,7 +185,7 @@ def solve_mpc(Ad, Bd, Q, R, P, x0, N, u_min, u_max, theta_index, theta_min, thet
     H, f = gen_cost_matrices(Q, R, P, T, S, x0, N)
 
     A_ineq, b_ineq = gen_constraint_matrices(
-        T, S, x0, N, u_min, u_max, theta_index, theta_min, theta_max
+        T, S, x0, N, u_min, u_max, theta_index, theta_min, theta_max, A_inf, b_inf
     )
 
     # quadprog expects:
@@ -189,22 +214,107 @@ def solve_mpc(Ad, Bd, Q, R, P, x0, N, u_min, u_max, theta_index, theta_min, thet
     return u, u_bar
 
 
+
+"""TERMINAL SET FUNCTIONS"""
+def box_constraints(lb, ub):
+    num_con = 2 * len(lb)
+    A = np.kron(np.eye(len(lb)), [[1], [-1]])
+
+    b = np.zeros(num_con)
+    for i in range(num_con):
+        b[i] = ub[i // 2] if i % 2 == 0 else -lb[i // 2]
+
+    goodrows = np.logical_and(~np.isinf(b), ~np.isnan(b))
+    A = A[goodrows]
+    b = b[goodrows]
+
+    return A, b
+
+def compute_maximal_admissible_set(F, A, b, max_iter=100):
+    '''
+    Compute the maximal admissible set for the system x_{t+1} = F x_t subject to A x_t <= b.
+
+    Note that if F is unstable, this procedure will not work.
+    '''
+
+    dim_con = A.shape[0]
+    A_inf_hist = []
+    b_inf_hist = []
+
+    Ft = F
+    A_inf = A
+    b_inf = b
+    A_inf_hist.append(A_inf)
+    b_inf_hist.append(b_inf)
+
+    for t in range(max_iter):
+        f_obj = A @ Ft
+        stop_flag = True
+        for i in range(dim_con):
+            x = linprog(-f_obj[i], A_ub=A_inf, b_ub=b_inf, method="highs")["x"]
+            # x = solve_qp(np.zeros((2, 2)), -f_obj[i], A_inf, b_inf, solver="") # Actually, this is not a QP, but a LP. It is better to use a LP solver.
+            if f_obj[i] @ x > b[i]:
+                stop_flag = False
+                break
+
+        if stop_flag:
+            break
+
+        A_inf = np.vstack((A_inf, A @ Ft))
+        b_inf = np.hstack((b_inf, b))
+        Ft = F @ Ft
+        A_inf_hist.append(A_inf)
+        b_inf_hist.append(b_inf)
+
+    return A_inf_hist, b_inf_hist
+
+
+def find_lqr_invariant_set(A, B, K, lb_x, ub_x, lb_u, ub_u):
+    A_x, b_x = box_constraints(lb_x, ub_x)
+    A_u, b_u = box_constraints(lb_u, ub_u)
+
+    A_lqr = A_u @ K
+    b_lqr = b_u
+
+    A_con = np.vstack((A_lqr, A_x))
+    b_con = np.hstack((b_lqr, b_x))
+
+    F = A + B @ K
+
+    A_inf_hist, b_inf_hist = compute_maximal_admissible_set(F, A_con, b_con)
+
+    return A_inf_hist, b_inf_hist
+
+def plot_polygon(A, b):
+    '''
+    Visualize the polytope defined by A x <= b.
+    '''
+    halfspaces = np.hstack((A, -b[:, np.newaxis]))
+    feasible_point = np.zeros(A.shape[1])
+    hs = HalfspaceIntersection(halfspaces, feasible_point)
+    polygon = Polygon(hs.intersections).convex_hull
+    polygon_gpd = gpd.GeoSeries(polygon)
+    polygon_gpd.plot(alpha=0.3)
+    plt.plot(*polygon.exterior.xy, 'ro')
+    plt.axis('equal')
+    plt.grid()
+
 # Discretize your system
 Ad, Bd = discretize_system(A_c, B_c, dt)
 
-print("Ad:")
-print(Ad)
-print("\nBd:")
-print(Bd)
+# print("Ad:")
+# print(Ad)
+# print("\nBd:")
+# print(Bd)
 
 
 # MPC parameters
-N = 20
+N = 100
 
 # State cost
 Q = np.diag([
-    10.0,
-    10.0,
+    50.0,
+    50.0,
     10.0,
     10.0,
     10.0,
@@ -222,7 +332,19 @@ R = np.diag([
 ])
 
 # Terminal cost
-P = 10.0 * Q
+# P = 10.0 * Q
+
+#Calculate P with DARE Equation
+
+P_inf, _, K_inf = dare(Ad, Bd, Q, R)
+K_inf = -K_inf
+
+# print("Terminal Cost Matrix P:\n", P_inf)
+# print("terminal cost matrix P shape", P_inf.shape)
+#
+#
+# print("K_inf", K_inf)
+# print("K_inf shape", K_inf.shape)
 
 
 # ------------------------------------------------------------
@@ -245,6 +367,35 @@ theta_max = 50.0
 # Initial condition
 x0 = np.zeros(dim_x)
 x0[3] = 0.1
+x0[4] = 0.1
+x0[0] = 0.1
+
+
+
+#TERMINAL SET CALCULATIONS
+K = K_inf
+BIG = 1000.0
+lb_x = [-0.5, -BIG, -50, -BIG, -BIG, -BIG, -BIG, -BIG, -BIG, -BIG]
+ub_x = [ 0.5,  BIG,  50,  BIG,  BIG,  BIG,  BIG,  BIG,  BIG,  BIG]
+lb_u = u_min
+ub_u = u_max
+
+A_x, b_x = box_constraints(lb_x, ub_x)
+A_u, b_u = box_constraints(lb_u, ub_u)
+
+A_lqr = A_u @ K
+b_lqr = b_u
+
+A_con = np.vstack((A_lqr, A_x))
+b_con = np.hstack((b_lqr, b_x))
+
+A_inf_hist, b_inf_hist = find_lqr_invariant_set(Ad, Bd, K, lb_x, ub_x, lb_u, ub_u)
+_, A_inf, b_inf, _, _ = remove_redundant_constraints(A_inf_hist[-1], b_inf_hist[-1])
+
+print(f"A_inf:\n{A_inf}")
+print(f"b_inf:\n{b_inf}")
+# print("A_inf shape", A_inf.shape)
+# print("b_inf shape", b_inf.shape)
 
 
 # Closed-loop simulation
@@ -255,7 +406,7 @@ x_hist[0, :] = x0
 
 for t in range(N_sim):
     u, u_bar = solve_mpc(
-        Ad, Bd, Q, R, P, x_hist[t, :], N,
+        Ad, Bd, Q, R, P_inf, x_hist[t, :], N,
         u_min, u_max,
         theta_index, theta_min, theta_max
     )
@@ -264,14 +415,38 @@ for t in range(N_sim):
     x_hist[t + 1, :] = Ad @ x_hist[t, :] + Bd @ u
 
 
-print("\nFirst control input:")
-print(u_hist[0, :])
+# print("\nFirst control input:")
+# print(u_hist[0, :])
+#
+# print("\nFinal state:")
+# print(x_hist[-1, :])
+#
+# print("\nMaximum theta during simulation:")
+# print(np.max(x_hist[:, theta_index]))
+#
+# print("\nMinimum theta during simulation:")
+# print(np.min(x_hist[:, theta_index]))
 
-print("\nFinal state:")
-print(x_hist[-1, :])
 
-print("\nMaximum theta during simulation:")
-print(np.max(x_hist[:, theta_index]))
+#PLOTTING (and scheming)
+t = dt * np.arange(N_sim + 1)
 
-print("\nMinimum theta during simulation:")
-print(np.min(x_hist[:, theta_index]))
+fig, axes = plt.subplots(2, 5, figsize=(15, 6), sharex=True)
+axes = axes.flatten()  # makes indexing easier
+
+state_labels = ["φ", "δ", "θ", "γ", "β", "φ_dot", "δ_dot", "θ_dot", "γ_dot", "β_dot"]
+
+for i in range(10):
+    axes[i].plot(t, x_hist[:, i], '-o')
+    axes[i].set_title(state_labels[i])
+    axes[i].grid()
+
+# Common labels
+fig.supxlabel('Time [s]')
+fig.supylabel('State')
+
+plt.tight_layout()
+plt.show()
+
+print("x_hist[:, 0]")
+print(x_hist[:, 0])

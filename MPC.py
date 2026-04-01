@@ -199,7 +199,7 @@ print(Bd)
 
 
 # MPC parameters
-N = 20
+N = 50
 
 # State cost
 Q = np.diag([

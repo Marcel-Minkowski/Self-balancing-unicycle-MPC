@@ -155,7 +155,7 @@ Aq = dL_dqd.jacobian(q) #
 Q = sm.Matrix([0, 0, tau_theta, 0, tau_beta]) #generalised forces
 forcing = Q - (Aq * qd - dL_dq)
 
-params = [R, l1, l2, r1, r2, r3, r_rope, m1, m2, m3, m_rod, m_rope, g, L_rope]
+params = [R, l1, l2, r1, r2, r_rope, m1, m2, m_rod, m_rope, g, L_rope]
 inputs = [tau_theta, tau_beta]
 state_syms = list(q) + list(qd)
 
@@ -190,11 +190,9 @@ constants = {
     l2: 0.4,
     r1: 0.1,
     r2: 0.08,
-    r3: 0.08,
     r_rope: 0.02,
     m1: 2.0,
     m2: 1.0,
-    m3: 1.0,
     m_rod: 0.8,
     m_rope: 0.2,
     g: 9.81,
@@ -254,7 +252,8 @@ def controllability_matrix(A, B):
 x_equilibrium = np.zeros(10)
 u_equilibrium = np.zeros(2)
 A, B = linearize_numerically(f, x_equilibrium, u_equilibrium)
-
+print(f'A is equal to:  {A}')
+print(f'B matrix: {B}')
 
 C = controllability_matrix(A, B)
 rank_C = np.linalg.matrix_rank(C)

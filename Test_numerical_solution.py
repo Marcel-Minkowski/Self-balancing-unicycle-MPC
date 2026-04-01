@@ -33,8 +33,8 @@ m_rod: Mass of Unicycle Body
 """
 
 phi, theta, delta, gamma, beta = me.dynamicsymbols('phi theta delta gamma beta')
-R, l1, l2, r1, r2, r3, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r3 r_rope L_rope", real=True)
-m1, m2, m3, m_rod, m_rope, g = sm.symbols("m1 m2 m3 m_rod m_rope g", real=True)
+R, l1, l2, r1, r2, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r_rope L_rope", real=True)
+m1, m2, m_rod, m_rope, g = sm.symbols("m1 m2 m_rod m_rope g", real=True)
 tau_theta, tau_beta = sm.symbols("tau_theta tau_beta", real=True)
 
 t = me.dynamicsymbols._t
@@ -185,12 +185,12 @@ def make_state_space_function(constants):
     return f
 
 constants = {
-    R: 1.0,
+    R: 0.1,     # radius of the rope
     l1: 0.5,
-    l2: 0.4,
-    r1: 0.1,
-    r2: 0.08,
-    r_rope: 0.02,
+    l2: 0.5,
+    r1: 0.3,    # radius of the wheel
+    r2: 0.08,   # radius of the reaction wheel
+    r_rope: 0.02, # Why ????
     m1: 2.0,
     m2: 1.0,
     m_rod: 0.8,

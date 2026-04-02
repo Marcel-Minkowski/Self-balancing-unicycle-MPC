@@ -32,7 +32,7 @@ m_rod: Mass of Unicycle Body
 
 """
 
-phi, theta, delta, gamma, beta = me.dynamicsymbols('phi theta delta gamma beta')
+phi, delta, theta, gamma, beta = me.dynamicsymbols('phi theta delta gamma beta')
 R, l1, l2, r1, r2, r3, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r3 r_rope L_rope", real=True)
 m1, m2, m3, m_rod, m_rope, g = sm.symbols("m1 m2 m3 m_rod m_rope g", real=True)
 tau_theta, tau_beta = sm.symbols("tau_theta tau_beta", real=True)
@@ -205,11 +205,12 @@ f = make_state_space_function(constants)
 
 
 x0 = np.zeros(10)
-u0 = np.array([5, 0])
+x0[3] = 0.1
+u0 = np.array([0, 0])
 
 xdot0 = f(x0, u0)
-print("xdot(x0,u0) =")
-print(xdot0)
+# print("xdot(x0,u0) =")
+# print(xdot0)
 
 ###################################################################
 
@@ -255,15 +256,14 @@ x_equilibrium = np.zeros(10)
 u_equilibrium = np.zeros(2)
 A, B = linearize_numerically(f, x_equilibrium, u_equilibrium)
 
-
 C = controllability_matrix(A, B)
 rank_C = np.linalg.matrix_rank(C)
 
-print("Controllability rank:", rank_C)
-print("State dimension:", A.shape[0])
+# print("Controllability rank:", rank_C)
+# print("State dimension:", A.shape[0])
 
 N = null_space(C.T)
-print("Uncontrollable subspace basis:\n", N)
+# print("Uncontrollable subspace basis:\n", N)
 
 
 #State Constraints

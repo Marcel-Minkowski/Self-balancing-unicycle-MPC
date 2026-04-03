@@ -1,7 +1,32 @@
 import numpy as np
 from qpsolvers import solve_qp
 import cvxpy as cp
+from scipy.linalg import expm
+from lqr_set import remove_redundant_constraints
+import scipy as sp
+import geopandas as gpd
+from scipy.optimize import linprog
+import scipy
 
+
+def dimensions(A, B):
+    return A.shape[0], B.shape[1]
+
+def matrix_discretization(Ac, Bc, dt = 0.1):
+    dim_x = Ac.shape[0]
+    dim_u = Bc.shape[1]
+
+    ABc = np.zeros((dim_x + dim_u, dim_x + dim_u))
+    ABc[:dim_x, :dim_x] = Ac
+    ABc[:dim_x, dim_x:] = Bc
+    expm_ABc = expm(ABc*dt)
+    Ad = expm_ABc[:dim_x, :dim_x]
+    Bd = expm_ABc[:dim_x, dim_x:]
+
+    # print(f"Ad:\n{Ad}")
+    # print(f"Bd:\n{Bd}")
+
+    return Ad, Bd
 
 def gen_prediction_matrices(Ad, Bd, N):
     dim_x = Ad.shape[0]
@@ -43,7 +68,7 @@ def gen_constraint_matrices(x0, A, B, T, S, N, u_lb, u_ub, D = None, c_lb = None
 ):
     nx = A.shape[0]
     nu = B.shape[1]
-    
+
     # Input constraints
     Iu = np.eye(nu * N)
     Gu = np.vstack([Iu, -Iu])
@@ -73,7 +98,7 @@ def gen_constraint_matrices(x0, A, B, T, S, N, u_lb, u_ub, D = None, c_lb = None
     
     return G, g
 
-def solve_condensed_mpc(x0, A, B, Q, R, P, N, u_lb, u_ub, D = None, c_lb = None, c_ub = None, with_terminal_constraint=False):
+def solve_condensed_mpc(x0, A, B, Q, R, P, N, u_lb, u_ub, D = None, c_lb = None, c_ub = None, with_terminal_constraint=False, A_inf = None, b_inf = None):
     dim_x = A.shape[0]
     dim_u = B.shape[1]
 
@@ -84,8 +109,25 @@ def solve_condensed_mpc(x0, A, B, Q, R, P, N, u_lb, u_ub, D = None, c_lb = None,
     Gf = None
     gf = None
     if with_terminal_constraint:
-        Gf = S[-dim_x:, :]
-        gf = -T[-dim_x:, :] @ x0
+        #from chat
+
+        SN = S[-dim_x:, :]  # rows corresponding to x_N
+        TN = T[-dim_x:, :]  # rows corresponding to x_N
+
+        Gf = A_inf @ SN
+        gf = b_inf - A_inf @ TN @ x0
+
+        print("SN.shape:", SN.shape)
+        print("A_inf.shape:", A_inf.shape)
+
+
+        # Gf = S[-dim_x:, :]
+        # gf = -T[-dim_x:, :] @ x0
+
+    # print("Gf.shape:", Gf.shape)
+    # print("gf.shape:", gf.shape)
+    # print("G.shape:", G.shape)
+    # print("g.shape:", g.shape)
 
     u_bar = solve_qp(H, h,
                      A=Gf, b=gf,
@@ -178,27 +220,27 @@ def proj_input(G, H, psi, N, dim_u):
     return P_i, gamma_i
 
 
-def solve_mpc_condensed(Ad, Bd, Q, R, P, x0, N, u_lb, u_ub):
-    dim_u = Bd.shape[1]
-    dim_x = Ad.shape[0]
-    T, S = gen_prediction_matrices(Ad, Bd, N)
-    H, h = gen_cost_matrices(Q, R, P, T, S, x0, N)
-
-    # print("np.linalg.cond(H)", np.linalg.cond(H))
-    # print("H shape", H.shape)
-    # print("h shape", h.shape)
-
-    Gu_bar, gu_bar = gen_constraint_matrices_diff(u_lb, u_ub, N)
-
-    # print("G shape", Gu_bar.shape)
-    # print("g shape", gu_bar.shape)
-
-    u_bar = solve_qp(H, h, G=Gu_bar, h=gu_bar, solver='quadprog')
-    x_bar = T @ x0 + S @ u_bar
-    x_bar = x_bar.reshape((N + 1, dim_x))
-    u_bar = u_bar.reshape((N, dim_u))
-
-    return x_bar, u_bar
+# def solve_mpc_condensed(Ad, Bd, Q, R, P, x0, N, u_lb, u_ub):
+#     dim_u = Bd.shape[1]
+#     dim_x = Ad.shape[0]
+#     T, S = gen_prediction_matrices(Ad, Bd, N)
+#     H, h = gen_cost_matrices(Q, R, P, T, S, x0, N)
+#
+#     # print("np.linalg.cond(H)", np.linalg.cond(H))
+#     # print("H shape", H.shape)
+#     # print("h shape", h.shape)
+#
+#     Gu_bar, gu_bar = gen_constraint_matrices_diff(u_lb, u_ub, N)
+#
+#     # print("G shape", Gu_bar.shape)
+#     # print("g shape", gu_bar.shape)
+#
+#     u_bar = solve_qp(H, h, G=Gu_bar, h=gu_bar, solver='quadprog')
+#     x_bar = T @ x0 + S @ u_bar
+#     x_bar = x_bar.reshape((N + 1, dim_x))
+#     u_bar = u_bar.reshape((N, dim_u))
+#
+#     return x_bar, u_bar
 
 
 def gen_constraint_matrices_diff(u_lb, u_ub, N):
@@ -217,34 +259,152 @@ def gen_constraint_matrices_diff(u_lb, u_ub, N):
 
     return Gu_bar, gu_bar
 
-def solve_mpc(
-        A, B, Q, R, P, N,
-        D, c_lb, c_ub,
-        x0,
-        with_terminal_constraint=False
-):
-    dim_x = A.shape[0]
-    dim_u = B.shape[1]
+# def solve_mpc(
+#         A, B, Q, R, P, N,
+#         D, c_lb, c_ub,
+#         x0,
+#         with_terminal_constraint=False
+# ):
+#     dim_x = A.shape[0]
+#     dim_u = B.shape[1]
+#
+#     x_bar = cp.Variable((N + 1, dim_x))
+#     u_bar = cp.Variable((N, dim_u))
+#
+#     cost = 0.
+#     constraints = [x_bar[0, :] == x0]
+#     for k in range(N):
+#         cost += 0.5 * cp.quad_form(x_bar[k, :], Q) + 0.5 * cp.quad_form(u_bar[k, :], R)
+#         constraints += [x_bar[k + 1, :] == A @ x_bar[k, :] + B @ u_bar[k, :]]
+#         constraints += [D @ x_bar[k + 1, :] <= c_ub]
+#         constraints += [D @ x_bar[k + 1, :] >= c_lb]
+#
+#     cost += 0.5 * cp.quad_form(x_bar[N, :], P)
+#
+#     if with_terminal_constraint:
+#         constraints += [x_bar[N, :] == 0]
+#
+#     prob = cp.Problem(cp.Minimize(cost), constraints)
+#     prob.solve()
+#
+#     assert prob.status == cp.OPTIMAL, "Solver failed to find optimal solution"
+#
+#     return x_bar.value, u_bar.value
 
-    x_bar = cp.Variable((N + 1, dim_x))
-    u_bar = cp.Variable((N, dim_u))
+# def stability_check(A, B, K):
+#     #open loop stability
+#     open_loop_eigenvalues = np.linalg.eig(A)[0]
+#     #closed loop stability
+#     A_cl = A - B @ K
+#     closed_loop_eigenvalues = np.linalg.eig(A_cl)[0]
+#
+#     print("Open Loop Eigenvalues:")
+#     print(open_loop_eigenvalues)
+#     print("Closed Loop Eigenvalues:")
+#     print(closed_loop_eigenvalues)
 
-    cost = 0.
-    constraints = [x_bar[0, :] == x0]
-    for k in range(N):
-        cost += 0.5 * cp.quad_form(x_bar[k, :], Q) + 0.5 * cp.quad_form(u_bar[k, :], R)
-        constraints += [x_bar[k + 1, :] == A @ x_bar[k, :] + B @ u_bar[k, :]]
-        constraints += [D @ x_bar[k + 1, :] <= c_ub]
-        constraints += [D @ x_bar[k + 1, :] >= c_lb]
+"""
+TERMINAL SET FUNCTIONS
+"""
+def terminal_set(A, B, K, lb_x, lb_u, ub_x, ub_u):
+    A_x, b_x = box_constraints(lb_x, ub_x)
+    A_u, b_u = box_constraints(lb_u, ub_u)
 
-    cost += 0.5 * cp.quad_form(x_bar[N, :], P)
+    A_lqr = A_u @ K
+    b_lqr = b_u
 
-    if with_terminal_constraint:
-        constraints += [x_bar[N, :] == 0]
+    A_con = np.vstack((A_lqr, A_x))
+    b_con = np.hstack((b_lqr, b_x))
 
-    prob = cp.Problem(cp.Minimize(cost), constraints)
-    prob.solve()
+    A_inf_hist, b_inf_hist = find_lqr_invariant_set(A, B, K, lb_x, ub_x, lb_u, ub_u)
+    A_inf, b_inf = A_inf_hist, b_inf_hist
+    # _, A_inf, b_inf, _, _ = remove_redundant_constraints(A_inf_hist[-1], b_inf_hist[-1])
 
-    assert prob.status == cp.OPTIMAL, "Solver failed to find optimal solution"
+    A_inf = np.atleast_2d(A_inf_hist[-1])
+    b_inf = np.atleast_1d(b_inf_hist[-1])
 
-    return x_bar.value, u_bar.value
+    return A_inf, b_inf
+
+
+def box_constraints(lb, ub):
+    num_con = 2 * len(lb)
+    A = np.kron(np.eye(len(lb)), [[1], [-1]])
+
+    b = np.zeros(num_con)
+    for i in range(num_con):
+        b[i] = ub[i // 2] if i % 2 == 0 else -lb[i // 2]
+
+    goodrows = np.logical_and(~np.isinf(b), ~np.isnan(b))
+    A = A[goodrows]
+    b = b[goodrows]
+
+    return A, b
+
+
+def find_lqr_invariant_set(A, B, K, lb_x, ub_x, lb_u, ub_u):
+    A_x, b_x = box_constraints(lb_x, ub_x)
+    A_u, b_u = box_constraints(lb_u, ub_u)
+
+    A_lqr = A_u @ K
+    b_lqr = b_u
+
+    A_con = np.vstack((A_lqr, A_x))
+    b_con = np.hstack((b_lqr, b_x))
+
+    F = A - B @ K
+    # print("eigenvalues of F", np.linalg.eigvals(F))
+
+    A_inf_hist, b_inf_hist = compute_maximal_admissible_set(F, A_con, b_con)
+
+    return A_inf_hist, b_inf_hist
+
+
+def compute_maximal_admissible_set(F, A, b, max_iter=100):
+    '''
+    Compute the maximal admissible set for the system x_{t+1} = F x_t subject to A x_t <= b.
+    '''
+    dim_con = A.shape[0]
+    A_inf_hist = []
+    b_inf_hist = []
+
+    Ft = F
+    A_inf = A
+    b_inf = b
+    A_inf_hist.append(A_inf)
+    b_inf_hist.append(b_inf)
+
+    for t in range(max_iter):
+        f_obj = A @ Ft
+        stop_flag = True
+        for i in range(dim_con):
+            n = A_inf.shape[1]
+            bounds = [(-1e6, 1e6)] * n
+
+            res = linprog(-f_obj[i], A_ub=A_inf, b_ub=b_inf, method="highs")
+
+            if not res.success:
+                print("LP failed:", res.message)
+                print("Status:", res.status)
+                print("f_obj[i]:", f_obj[i])
+                raise ValueError("Linear program failed")
+
+            x = res.x
+
+            if f_obj[i] @ x > b[i]:
+            # x = linprog(-f_obj[i], A_ub=A_inf, b_ub=b_inf, method="highs")["x"]
+            # print("x", x)
+            # # x = solve_qp(np.zeros((2, 2)), -f_obj[i], A_inf, b_inf, solver="") # Actually, this is not a QP, but a LP. It is better to use a LP solver.
+            # if f_obj[i] @ x > b[i]:
+                stop_flag = False
+                break
+
+        if stop_flag:
+            break
+
+        A_inf = np.vstack((A_inf, A @ Ft))
+        b_inf = np.hstack((b_inf, b))
+        Ft = F @ Ft
+        A_inf_hist.append(A_inf)
+        b_inf_hist.append(b_inf)
+
+    return A_inf_hist, b_inf_hist

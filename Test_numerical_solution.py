@@ -32,7 +32,7 @@ m_rod: Mass of Unicycle Body
 
 """
 
-phi, delta, theta, gamma, beta = me.dynamicsymbols('phi theta delta gamma beta')
+phi, delta, theta, gamma, beta = me.dynamicsymbols('phi delta theta gamma beta')
 R, l1, l2, r1, r2, r3, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r3 r_rope L_rope", real=True)
 m1, m2, m3, m_rod, m_rope, g = sm.symbols("m1 m2 m3 m_rod m_rope g", real=True)
 tau_theta, tau_beta = sm.symbols("tau_theta tau_beta", real=True)
@@ -203,10 +203,11 @@ constants = {
 
 f = make_state_space_function(constants)
 
-
+#equilibrium
 x0 = np.zeros(10)
-x0[3] = 0.1
 u0 = np.array([0, 0])
+x0[2] = 0.1#theta, roll
+x0[1] = 0  #delta, tilt
 
 xdot0 = f(x0, u0)
 # print("xdot(x0,u0) =")

@@ -61,13 +61,15 @@ def gen_cost_matrices(Q, R, P, T, S, x0, N):
     h = S.T @ Q_bar @ T @ x0
     
     H = 0.5 * (H + H.T) # Ensure symmetry!
-    
+    H += np.eye(H.shape[0]) * 1e-8 #ensure positive definitness
+    # print("eigenvalues = np.linalg.eigvals(h)", np.linalg.eigvals(H))
+
     return H, h
 
 def gen_constraint_matrices(x0, A, B, T, S, N, u_lb, u_ub, D = None, c_lb = None, c_ub = None,
 ):
-    nx = A.shape[0]
-    nu = B.shape[1]
+    nx = A.shape[0] #dimensions of states
+    nu = B.shape[1] #dimensions of inputs
 
     # Input constraints
     Iu = np.eye(nu * N)
@@ -109,17 +111,29 @@ def solve_condensed_mpc(x0, A, B, Q, R, P, N, u_lb, u_ub, D = None, c_lb = None,
     Gf = None
     gf = None
     if with_terminal_constraint:
+        print("with terminal set constraints")
         #from chat
+        SN = S[-dim_x:, :] #S at step N
+        TN = T[-dim_x:, :] #T at step N
 
-        SN = S[-dim_x:, :]  # rows corresponding to x_N
-        TN = T[-dim_x:, :]  # rows corresponding to x_N
+        # Define as inequalities
+        G_term = A_inf @ SN #projecting the state constraints onto inputs
+        g_term = b_inf.flatten() - (A_inf @ TN @ x0).flatten()
 
-        Gf = A_inf @ SN
-        gf = b_inf - A_inf @ TN @ x0
+        # Append to the path constraints G and g
+        G = np.vstack([G, G_term])
+        g = np.hstack([g, g_term])
 
-        print("SN.shape:", SN.shape)
-        print("A_inf.shape:", A_inf.shape)
+    u_bar = solve_qp(H, h, G=G, h=g, solver='quadprog')
 
+        # SN = S[-dim_x:, :]  # rows corresponding to x_N
+        # TN = T[-dim_x:, :]  # rows corresponding to x_N
+        #
+        # Gf = A_inf @ SN
+        # gf = b_inf - A_inf @ TN @ x0
+
+        # print("SN.shape:", SN.shape)
+        # print("A_inf.shape:", A_inf.shape)
 
         # Gf = S[-dim_x:, :]
         # gf = -T[-dim_x:, :] @ x0
@@ -129,18 +143,19 @@ def solve_condensed_mpc(x0, A, B, Q, R, P, N, u_lb, u_ub, D = None, c_lb = None,
     # print("G.shape:", G.shape)
     # print("g.shape:", g.shape)
 
-    u_bar = solve_qp(H, h,
-                     A=Gf, b=gf,
-                     G=G, h=g,
-                     solver = 'quadprog')
+    # u_bar = solve_qp(H, h,
+    #                  A=Gf, b=gf,
+    #                  G=G, h=g,
+    #                  solver = 'quadprog')
+
+    # print("Just calculated u bar and it is ", u_bar)
 
     if u_bar is None:
         print("CRITICAL: Solver failed to find a solution. The problem is infeasible.")
         # Check if constraints are the culprit by trying to solve without them:
         u_bar_test = solve_qp(H, h, solver='quadprog')
         print("Unconstrained solution exists:", u_bar_test is not None)
-        return None, None  # Or handle the error gracefully
-
+        return None, None
 
     x_bar = T @ x0 + S @ u_bar
     x_bar = x_bar.reshape((N + 1, dim_x))
@@ -243,21 +258,21 @@ def proj_input(G, H, psi, N, dim_u):
 #     return x_bar, u_bar
 
 
-def gen_constraint_matrices_diff(u_lb, u_ub, N):
-    dim_u = u_lb.shape[0]
-
-    Gu = np.zeros((2 * dim_u, dim_u))
-    Gu[0: dim_u, :] = np.eye(dim_u)
-    Gu[dim_u:, :] = -np.eye(dim_u)
-
-    gu = np.zeros(2 * dim_u)
-    gu[0: dim_u] = u_ub
-    gu[dim_u:] = -u_lb
-
-    Gu_bar = np.kron(np.eye(N), Gu)
-    gu_bar = np.kron(np.ones(N), gu)
-
-    return Gu_bar, gu_bar
+# def gen_constraint_matrices_diff(u_lb, u_ub, N):
+#     dim_u = u_lb.shape[0]
+#
+#     Gu = np.zeros((2 * dim_u, dim_u))
+#     Gu[0: dim_u, :] = np.eye(dim_u)
+#     Gu[dim_u:, :] = -np.eye(dim_u)
+#
+#     gu = np.zeros(2 * dim_u)
+#     gu[0: dim_u] = u_ub
+#     gu[dim_u:] = -u_lb
+#
+#     Gu_bar = np.kron(np.eye(N), Gu)
+#     gu_bar = np.kron(np.ones(N), gu)
+#
+#     return Gu_bar, gu_bar
 
 # def solve_mpc(
 #         A, B, Q, R, P, N,
@@ -317,9 +332,11 @@ def terminal_set(A, B, K, lb_x, lb_u, ub_x, ub_u):
     b_con = np.hstack((b_lqr, b_x))
 
     A_inf_hist, b_inf_hist = find_lqr_invariant_set(A, B, K, lb_x, ub_x, lb_u, ub_u)
-    A_inf, b_inf = A_inf_hist, b_inf_hist
+    A_inf, b_inf = A_inf_hist[-1], b_inf_hist[-1] #take only the constraints when the set has converged
+
     # _, A_inf, b_inf, _, _ = remove_redundant_constraints(A_inf_hist[-1], b_inf_hist[-1])
 
+    #convert to arrays
     A_inf = np.atleast_2d(A_inf_hist[-1])
     b_inf = np.atleast_1d(b_inf_hist[-1])
 
@@ -408,3 +425,68 @@ def compute_maximal_admissible_set(F, A, b, max_iter=100):
         b_inf_hist.append(b_inf)
 
     return A_inf_hist, b_inf_hist
+
+#REGION OF ATTRACTION FUNCTIONS
+def computeX1(G, H, psi, Ad, Bd, P, gamma):  # TODO: Add support for the point constraint
+    '''
+    Computes the feasible set X_1 for the system x^+ = Ax + Bu subject to constraints Gx + Hu <= psi and x^+ \in Xf.
+    '''
+    print("within computeX1")
+    dim_u = Bd.shape[1]
+
+    # print("G shape", G.shape)
+    # print("P length", len(P))
+    # print("P[0] shape", P[0].shape)
+    # print("Ad shape", Ad.shape)
+    # print("P@Ad shape", (P @ Ad).shape)
+    G_ = np.vstack((G, P @ Ad))
+    H_ = np.vstack((H, P @ Bd))
+    psi_ = np.hstack((psi, -gamma))
+
+    psi_ = np.expand_dims(psi_, axis=1)
+    print("stuck here")
+    A, b = proj_input(G_, H_, psi_, 1, dim_u)
+    b = -b.squeeze()
+    print("unstuck")
+    return A, b
+
+
+def computeXn(A, B, K, N, lb_x, ub_x, lb_u, ub_u):
+    print("within comptueXn")
+    dim_x = A.shape[0]
+    dim_u = B.shape[1]
+
+    A_x, b_x = box_constraints(lb_x, ub_x)
+    A_u, b_u = box_constraints(lb_u, ub_u)
+
+    A_lqr = A_u @ K
+    b_lqr = b_u
+
+    A_con = np.vstack((A_lqr, A_x))
+    b_con = np.hstack((b_lqr, b_x))
+
+    F = A - B @ K
+
+    A_inf_hist, b_inf_hist = compute_maximal_admissible_set(F, A_con, b_con)
+    A_inf, b_inf = A_inf_hist[-1], b_inf_hist[-1] #take only the converged constraints
+    # _, A_inf, b_inf, _, _ = remove_redundant_constraints(A_inf_hist[-1], b_inf_hist[-1])
+
+    GH = sp.linalg.block_diag(A_x, A_u)
+    G = GH[:, :dim_x]
+    H = GH[:, dim_x:]
+    psi = -np.hstack((b_x, b_u))
+
+    # Xns = [(A_inf_hist[-1], b_inf_hist[-1])]
+    Xns = [(A_inf, b_inf)]
+
+    for i in range(N):
+        print("i =", i)
+        P, gamma = Xns[-1]
+        print("P", P.shape)
+        print("gamma", gamma.shape)
+        P, gamma = computeX1(G, H, psi, A, B, P, gamma)
+        # _, P, gamma, _, _ = remove_redundant_constraints(P, gamma)
+        Xns.append((P, gamma))
+        i += 1
+
+    return Xns

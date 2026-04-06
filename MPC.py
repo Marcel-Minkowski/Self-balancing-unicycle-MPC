@@ -15,8 +15,6 @@ from scipy.spatial import ConvexHull, HalfspaceIntersection
 from shapely.geometry import Polygon
 import geopandas as gpd
 from scipy.optimize import linprog
-
-
 np.set_printoptions(precision=5, suppress=True)
 
 
@@ -302,12 +300,6 @@ def plot_polygon(A, b):
 # Discretize your system
 Ad, Bd = discretize_system(A_c, B_c, dt)
 
-# print("Ad:")
-# print(Ad)
-# print("\nBd:")
-# print(Bd)
-
-
 # MPC parameters
 N = 100
 
@@ -339,13 +331,6 @@ R = np.diag([
 P_inf, _, K_inf = dare(Ad, Bd, Q, R)
 K_inf = -K_inf
 
-# print("Terminal Cost Matrix P:\n", P_inf)
-# print("terminal cost matrix P shape", P_inf.shape)
-#
-#
-# print("K_inf", K_inf)
-# print("K_inf shape", K_inf.shape)
-
 
 # ------------------------------------------------------------
 # Constraints
@@ -360,8 +345,8 @@ u_max = np.array([ 10.0,  10.0])
 # State order is:
 # [phi, delta, theta, gamma, beta, phi_dot, delta_dot, theta_dot, gamma_dot, beta_dot]
 theta_index = 2
-theta_min = -50.0
-theta_max = 50.0
+theta_min = -16.6
+theta_max = 16.6
 
 
 # Initial condition
@@ -399,7 +384,7 @@ print(f"b_inf:\n{b_inf}")
 
 
 # Closed-loop simulation
-N_sim = 200
+N_sim = 400
 x_hist = np.zeros((N_sim + 1, dim_x))
 u_hist = np.zeros((N_sim, dim_u))
 x_hist[0, :] = x0
@@ -415,17 +400,6 @@ for t in range(N_sim):
     x_hist[t + 1, :] = Ad @ x_hist[t, :] + Bd @ u
 
 
-# print("\nFirst control input:")
-# print(u_hist[0, :])
-#
-# print("\nFinal state:")
-# print(x_hist[-1, :])
-#
-# print("\nMaximum theta during simulation:")
-# print(np.max(x_hist[:, theta_index]))
-#
-# print("\nMinimum theta during simulation:")
-# print(np.min(x_hist[:, theta_index]))
 
 
 #PLOTTING (and scheming)

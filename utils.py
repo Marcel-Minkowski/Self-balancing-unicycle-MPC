@@ -46,7 +46,6 @@ def gen_prediction_matrices(Ad, Bd, N):
         for j in range(N):
             if k > j:
                 S[k * dim_x:(k + 1) * dim_x, j * dim_u:(j + 1) * dim_u] = power_matricies[k - j - 1] @ Bd
-
     return T, S
 
 def gen_cost_matrices(Q, R, P, T, S, x0, N):
@@ -362,7 +361,7 @@ def find_lqr_invariant_set(A, B, K, lb_x, ub_x, lb_u, ub_u):
     A_x, b_x = box_constraints(lb_x, ub_x)
     A_u, b_u = box_constraints(lb_u, ub_u)
 
-    A_lqr = A_u @ K
+    A_lqr = - A_u @ K
     b_lqr = b_u
 
     A_con = np.vstack((A_lqr, A_x))
@@ -488,3 +487,57 @@ def computeXn(A, B, K, N, lb_x, ub_x, lb_u, ub_u):
         i += 1
 
     return Xns
+
+def solve_PID(x0, Ad, Bd, N_sim):
+    x_ref = np.zeros((10, 1))
+    se = np.zeros((10, 1))  # integrated error vector
+    pe = np.zeros((10, 1))  # previous error vector
+    t = 0.0  # time
+    dx = np.zeros((10, 1))  # velocity vector
+    ddx = np.zeros((10, 1))  # acceleration vector
+    dt = 0.1  # sample time to match the discretization of Ad, Bd
+
+    # PID GAIN TUNING
+    Kp = np.zeros((2, 10))
+    Kp[0, 2] = -0.5
+    Kp[0, 3] = -0.15
+    Kp[1, 0] = -0.6
+    Kp[1, 1] = -0.5
+    Kp[1, 4] = -0.3
+
+    Ki = np.zeros((2, 10))
+    Ki[0, 2] = -0.05
+    Ki[0, 3] = -0.02
+    Ki[1, 0] = -0.1
+    Ki[1, 1] = -0.08
+    Ki[1, 4] = -0.05
+
+    Kd = np.zeros((2, 10))
+    Kd[0, 7] = -0.3
+    Kd[0, 8] = -0.1
+    Kd[1, 5] = -0.4
+    Kd[1, 6] = -0.3
+    Kd[1, 7] = -0.15
+
+    #Simulation
+    for t in range(N_sim):
+        x = x.reshape(10, )
+        x_hist[t + 1, :] = x
+        x = x.reshape(10, 1)
+
+        error = x_ref - x
+
+        se = se + (
+                    error + pe) / 2 * dt  # accumulated error, equals the previous error plus the new error, calculated with the trapezoid rule
+        integral = Ki @ se  # integral control, multiplies Ki with the accumulated error
+        proportional = Kp @ error  # proportional control, multiplies Kp with the error
+        derivative = Kd @ (
+                    error - pe) / dt  # derivative control, multiplies Kd with the change in error using the discrete derivative
+        u = proportional + integral + derivative  # commanded torque
+
+        pe = error  # updates the error to "previous error" for the next iteration
+
+
+        x = Ad @ x + Bd @ u
+
+    return x_hist

@@ -6,9 +6,9 @@ import MPC_attempt_3 as mpc
 
 
 #Estimates the region of attraction numerically by generating random samples and seeing if the problem is still feasible
-def roa_sampled(samples_n, bounds, Ad, Bd, Q, R, P, N, u_lb, u_ub, D, c_lb, c_ub, A_inf, b_inf):
+def roa_sampled(samples_n, bounds, Ad, Bd, Q, R, P, N, u_lb, u_ub, D, lb_x, ub_x, A_inf, b_inf):
 
-    upper_bound, lower_bound = bounds #limits of the calculations
+    lower_bound, upper_bound = bounds #limits of the calculations
 
     #generate 10k random combinations of initial states
     x0_samples = np.random.uniform(lower_bound, upper_bound, (samples_n, 10))
@@ -19,7 +19,7 @@ def roa_sampled(samples_n, bounds, Ad, Bd, Q, R, P, N, u_lb, u_ub, D, c_lb, c_ub
     for x0 in x0_samples:
         print("i =", i)
         #solve the MPC for each set of initial conditions
-        x_bar, u_bar = ut.solve_condensed_mpc(x0, Ad, Bd, Q, R, P, N, u_lb, u_ub, D, c_lb, c_ub, True, A_inf, b_inf)
+        x_bar, u_bar = ut.solve_condensed_mpc(x0, Ad, Bd, Q, R, P, N, u_lb, u_ub, D, lb_x, ub_x, True, A_inf, b_inf)
         if u_bar is not None:
             feasible_results.append(x0)  # This is a feasible point
         else:
@@ -54,6 +54,6 @@ def plot_RoA_projections(feasible_results, unfeasible_results, state1, state2):
 bounds = [-1, 1] #radians
 samples_n = 500
 
-feasible_results, unfeasible_results = roa_sampled(samples_n, bounds, mpc.Ad, mpc.Bd, mpc.Q, mpc.R, mpc.P, mpc.N, mpc.u_lb, mpc.u_ub, mpc.D, mpc.c_lb, mpc.c_ub, mpc.A_inf, mpc.b_inf)
-plot_RoA_projections(feasible_results, unfeasible_results, 5, 6)
+feasible_results, unfeasible_results = roa_sampled(samples_n, bounds, mpc.Ad, mpc.Bd, mpc.Q, mpc.R, mpc.P, mpc.N, mpc.u_lb, mpc.u_ub, mpc.D, mpc.lb_x, mpc.ub_x, mpc.A_inf, mpc.b_inf)
+plot_RoA_projections(feasible_results, unfeasible_results, 1,6)
 

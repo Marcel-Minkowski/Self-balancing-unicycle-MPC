@@ -325,7 +325,7 @@ def terminal_set(A, B, K, lb_x, lb_u, ub_x, ub_u):
     A_x, b_x = box_constraints(lb_x, ub_x)
     A_u, b_u = box_constraints(lb_u, ub_u)
 
-    A_lqr = A_u @ K
+    A_lqr = -A_u @ K
     b_lqr = b_u
 
     A_con = np.vstack((A_lqr, A_x))
@@ -362,7 +362,7 @@ def find_lqr_invariant_set(A, B, K, lb_x, ub_x, lb_u, ub_u):
     A_x, b_x = box_constraints(lb_x, ub_x)
     A_u, b_u = box_constraints(lb_u, ub_u)
 
-    A_lqr = A_u @ K
+    A_lqr = -A_u @ K
     b_lqr = b_u
 
     A_con = np.vstack((A_lqr, A_x))
@@ -457,7 +457,7 @@ def computeXn(A, B, K, N, lb_x, ub_x, lb_u, ub_u):
     A_x, b_x = box_constraints(lb_x, ub_x)
     A_u, b_u = box_constraints(lb_u, ub_u)
 
-    A_lqr = A_u @ K
+    A_lqr = -A_u @ K
     b_lqr = b_u
 
     A_con = np.vstack((A_lqr, A_x))

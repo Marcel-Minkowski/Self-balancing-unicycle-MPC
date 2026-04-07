@@ -29,7 +29,6 @@ R[0,0] = 10
 Q[5,5] =10 #penalty on the rope velocity
 
 
-
 #Terminal Ingredients
 P, _, K = dare(Ad, Bd, Q, R) #terminal cost matrix and LQR gain
 

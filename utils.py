@@ -84,10 +84,11 @@ def gen_constraint_matrices(x0, A, B, T, S, N, u_lb, u_ub, D = None, c_lb = None
         T_tilde = T[:-nx, :]
         S_tilde = S[:-nx, :]
         D_tilde = np.kron(np.eye(N), D)
-        
-        DS_tilde = D_tilde @ S_tilde 
+
+        DS_tilde = D_tilde @ S_tilde
         Gx = np.vstack([DS_tilde, -DS_tilde])
         DT_tilde = D_tilde @ T_tilde
+
         gx = np.hstack([
              np.kron(np.ones(N), c_ub) - DT_tilde @ x0,
             -np.kron(np.ones(N), c_lb) + DT_tilde @ x0
@@ -111,7 +112,6 @@ def solve_condensed_mpc(x0, A, B, Q, R, P, N, u_lb, u_ub, D = None, c_lb = None,
     Gf = None
     gf = None
     if with_terminal_constraint:
-        print("with terminal set constraints")
         #from chat
         SN = S[-dim_x:, :] #S at step N
         TN = T[-dim_x:, :] #T at step N
@@ -431,7 +431,6 @@ def computeX1(G, H, psi, Ad, Bd, P, gamma):  # TODO: Add support for the point c
     '''
     Computes the feasible set X_1 for the system x^+ = Ax + Bu subject to constraints Gx + Hu <= psi and x^+ \in Xf.
     '''
-    print("within computeX1")
     dim_u = Bd.shape[1]
 
     # print("G shape", G.shape)
@@ -452,7 +451,6 @@ def computeX1(G, H, psi, Ad, Bd, P, gamma):  # TODO: Add support for the point c
 
 
 def computeXn(A, B, K, N, lb_x, ub_x, lb_u, ub_u):
-    print("within comptueXn")
     dim_x = A.shape[0]
     dim_u = B.shape[1]
 

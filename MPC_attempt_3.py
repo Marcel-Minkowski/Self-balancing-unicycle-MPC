@@ -40,16 +40,18 @@ P, _, K = dare(Ad, Bd, Q, R) #terminal cost matrix and LQR gain
 Torque_limit = 5
 u_lb = np.array([-Torque_limit, -Torque_limit]) #Torque lower limits
 u_ub = np.array([Torque_limit, Torque_limit]) #Torque upper limits
-D = np.zeros((1, dim_x)) #selector for theta constraint
-D[0, 2] = 1.0
+# D = np.zeros((1, dim_x)) #selector for theta constraint
+# D[0, 2] = 1.0
+D = np.eye(dim_x)
+
 
 c_lb = -50 #theta lower constraint
 c_ub = 50 #theta upper constraint
+inf_bound = 1e5 #artificial constraints for unconstrained states for stability
 
 #state constraints different format
-lb_x = [-np.inf, -np.inf, c_lb, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf]
-ub_x = [np.inf, np.inf, c_ub, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]
-
+lb_x = np.array([-inf_bound, -inf_bound, c_lb, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound])
+ub_x = np.array([inf_bound, inf_bound, c_ub, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound])
 
 # x_bar, u_bar = ut.solve_mpc_condensed(Ad, Bd, Q, R, P, x0, N, u_lb, u_ub)
 
@@ -78,7 +80,9 @@ for t in range(N_sim):
     # print(f"Time step: {t}")
     # x_bar, u_bar = ut.solve_mpc_condensed(Ad, Bd, Q, R, P, x_hist[t, :], N, u_lb, u_ub)
     # x_bar, u_bar = ut.solve_mpc(Ad, Bd, Q, R, P, N, D, c_lb, c_ub, x_hist[t, :], False)
-    x_bar, u_bar = ut.solve_condensed_mpc(x_hist[t, :], Ad, Bd, Q, R, P, N, u_lb, u_ub, D, c_lb, c_ub, True, A_inf, b_inf)
+    # x_bar, u_bar = ut.solve_condensed_mpc(x_hist[t, :], Ad, Bd, Q, R, P, N, u_lb, u_ub, D, c_lb, c_ub, True, A_inf, b_inf)
+    x_bar, u_bar = ut.solve_condensed_mpc(x_hist[t, :], Ad, Bd, Q, R, P, N, u_lb, u_ub, D, lb_x, ub_x, True, A_inf,
+                                          b_inf)
 
     u0 = u_bar[0, :] # Take the first control input
     u_hist[t, :] = u0

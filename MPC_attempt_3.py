@@ -44,18 +44,28 @@ u_ub = np.array([Torque_limit, Torque_limit]) #Torque upper limits
 D = np.eye(dim_x)
 
 
-c_lb = -50 #theta lower constraint
-c_ub = 50 #theta upper constraint
+c_lb_theta = -16.6 #theta lower constraint
+c_ub_theta = 16.6  #theta upper constraint
+
+c_lb_delta = -np.pi/2 #delta lower constraint
+c_ub_delta = np.pi/2  #delta upper constraint
+
+c_lb_gamma = -np.pi/2 #gamma lower constraint
+c_ub_gamma = np.pi/2  #gamma upper constraint
+
+
 inf_bound = 1e5 #artificial constraints for unconstrained states for stability
 
 #state constraints different format
-lb_x = np.array([-inf_bound, -inf_bound, c_lb, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound])
-ub_x = np.array([inf_bound, inf_bound, c_ub, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound])
+lb_x = np.array([-inf_bound, c_lb_delta, c_lb_theta, c_lb_gamma, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound, -inf_bound])
+ub_x = np.array([inf_bound, c_ub_delta, c_ub_theta, c_ub_gamma, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound, inf_bound])
 
 # x_bar, u_bar = ut.solve_mpc_condensed(Ad, Bd, Q, R, P, x0, N, u_lb, u_ub)
 
 #TERMINAL SET
 A_inf, b_inf = ut.terminal_set(Ad, Bd, K, lb_x, u_lb, ub_x, u_ub)
+# print(f'A_inf: {A_inf}')
+# print(f'b_inf: {b_inf}')
 
 # print("A_inf shape", A_inf.shape)
 # print("B_inf shape", b_inf.shape)

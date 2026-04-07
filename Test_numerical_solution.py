@@ -33,8 +33,8 @@ m_rod: Mass of Unicycle Body
 """
 
 phi, delta, theta, gamma, beta = me.dynamicsymbols('phi delta theta gamma beta')
-R, l1, l2, r1, r2, r3, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r3 r_rope L_rope", real=True)
-m1, m2, m3, m_rod, m_rope, g = sm.symbols("m1 m2 m3 m_rod m_rope g", real=True)
+R, l1, l2, r1, r2, r_rope, L_rope = sm.symbols("R l1 l2 r1 r2 r_rope L_rope", real=True)
+m1, m2, m_rod, m_rope, g = sm.symbols("m1 m2 m_rod m_rope g", real=True)
 tau_theta, tau_beta = sm.symbols("tau_theta tau_beta", real=True)
 
 t = me.dynamicsymbols._t
@@ -141,6 +141,7 @@ PE_PD = m2 * g * O_r_PD.dot(N.z)
 
 #Total KE and PE of system
 KE_system = TA + TB3 + TC + TD  + T_rot_A + T_rot_B + T_rot_C + T_rot_D 
+#KE_system = TA + TB3 + TC + TD + T_rot_B + T_rot_C + T_rot_D 
 PE_system = PE_PA + PE_PB3 + PE_PC + PE_PD
 
 #Lagrange for Equations of motion
@@ -155,7 +156,7 @@ Aq = dL_dqd.jacobian(q) #
 Q = sm.Matrix([0, 0, tau_theta, 0, tau_beta]) #generalised forces
 forcing = Q - (Aq * qd - dL_dq)
 
-params = [R, l1, l2, r1, r2, r3, r_rope, m1, m2, m3, m_rod, m_rope, g, L_rope]
+params = [R, l1, l2, r1, r2, r_rope, m1, m2, m_rod, m_rope, g, L_rope]
 inputs = [tau_theta, tau_beta]
 state_syms = list(q) + list(qd)
 
@@ -185,20 +186,18 @@ def make_state_space_function(constants):
     return f
 
 constants = {
-    R: 1.0,
-    l1: 0.5,
-    l2: 0.4,
-    r1: 0.1,
-    r2: 0.08,
-    r3: 0.08,
-    r_rope: 0.02,
-    m1: 2.0,
-    m2: 1.0,
-    m3: 1.0,
-    m_rod: 0.8,
-    m_rope: 0.2,
-    g: 9.81,
-    L_rope: 10
+    R: 0.5,         # radius of rotation of the rope
+    l1: 0.5,        # from center of the wheel to the middle of the rod
+    l2: 0.5,        # from the middle of the rod to the reaction wheels
+    r1: 0.3,       # radius of the rolling wheel
+    r2: 0.1,        # radius of reaction wheels
+    r_rope: 0.02,   # radius of the rope cross seciton
+    m1: 2.0,        # mass of the rolling wheel
+    m2: 1.0,        # mass of the reaction wheels
+    m_rod: 0.8,     # mass of the rod
+    m_rope: 0.2,    # mass of the rope
+    g: 9.81,        # gravitional acceleration
+    L_rope: 10      # Full length of the rope
 }
 
 f = make_state_space_function(constants)
@@ -207,7 +206,8 @@ f = make_state_space_function(constants)
 x0 = np.zeros(10)
 u0 = np.array([0, 0])
 x0[2] = 0.1#theta, roll
-x0[1] = 0  #delta, tilt
+x0[1] = 0.1  #delta, tilt
+x0[3] = 0.1 #gamma (roll of the pendulum with respect to the wheel)
 
 xdot0 = f(x0, u0)
 # print("xdot(x0,u0) =")
@@ -270,10 +270,8 @@ N = null_space(C.T)
 #State Constraints
 
 #Total rotations to stay on rope
-max_rad_rolling_wheel = (L_rope/r1).evalf(subs={L_rope:10, r1:0.1})
+max_rad_rolling_wheel = (L_rope/r1).evalf(subs={L_rope:10, r1:0.3})
 min_rolling_angle = -(max_rad_rolling_wheel/2)
 max_rolling_angle = (max_rad_rolling_wheel/2)
-
-
 
 
